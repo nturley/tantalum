@@ -96,16 +96,19 @@ class Command:
 
 
 class ValueChange:
-    def __init__(self, val):
+    def __init__(self, val, time):
+        self.comtype = 'vc'
         self.val = val
         self.sid = None
+        self.time = int(time)
 
     def __str__(self):
-        return self.sid + '=' + self.val
+        return self.sid + '=' + self.val + ' @' + str(self.time)
 
 
 class SimulationTime:
     def __init__(self, time):
+        self.comtype = 'time'
         self.time = time
 
     def __str__(self):
@@ -128,7 +131,7 @@ sim_keywords = set(['$dumpall',
 scalars = ('0', '1', 'x', 'X', 'z', 'Z')
 vec_types = ('b', 'B', 'r', 'R')
 
-keywords = decl_keywords | sim_keywords
+keywords = decl_keywords
 
 
 class StateMachine:
@@ -144,10 +147,15 @@ class StateMachine:
         # list of completed commands
         self.command_stream = []
 
+        self.simtime = 0
+
     def start_state(self, word, word_stack):
-        if word in keywords:
+        if word in decl_keywords:
             self.current_command = Command(word[1:])
             return self.command_state
+        if word in sim_keywords or word == '$end':
+            # it looks the same as a value change
+            return self.start_state
 
         # otherwise only consume one character
         # there is no guaranteed whitespace before next token
@@ -157,7 +165,7 @@ class StateMachine:
             return self.time_state
 
         # otherwise it's one of the value changes
-        self.current_command = ValueChange(word[0].lower())
+        self.current_command = ValueChange(word[0].lower(), self.simtime)
 
         # scalar values are one character so goto sid
         if word.startswith(scalars):
@@ -185,6 +193,7 @@ class StateMachine:
 
     def time_state(self, word, word_stack):
         time = SimulationTime(word)
+        self.simtime = time.time
         self.command_stream.append(time)
         return self.start_state
 
@@ -235,14 +244,76 @@ def get_header(file_name):
                 return header
 
 
+def get_signal_changes(file_name, signal_id):
+    with open(file_name) as f:
+        for com in generate_commands(f):
+            if com.comtype == 'vc':
+                if com.sid != signal_id:
+                    continue
+                yield com
+
+
 class MyScene(QGraphicsScene):
+    def __init__(self):
+        super(MyScene, self).__init__()
+        self.activeSignals = []
 
     def dragEnterEvent(self, e):
         e.acceptProposedAction()
 
     def dropEvent(self, e):
-        data = e.mimeData().text()
-        self.addText(data)
+        sid = e.mimeData().text()
+        print 'received sid: ' + sid
+        signal = [s for s in get_signal_changes(self.fname, sid)]
+        index = len(self.activeSignals)
+        currTime = None
+        currValue = None
+        lastY = None
+        for change in signal:
+            print change
+            if currTime is not None:
+                if currValue == 'x':
+                    self.addLine(currTime,
+                                 index * 50,
+                                 change.time,
+                                 index * 50,
+                                 QPen(Qt.red))
+                    if lastY is not None and lastY is not 0:
+                        self.addLine(currTime,
+                                     index * 50,
+                                     currTime,
+                                     index * 50 + lastY,
+                                     QPen(Qt.red))
+                    lastY = 0
+                elif currValue == '0':
+                    self.addLine(currTime,
+                                 index * 50 + 20,
+                                 change.time,
+                                 index * 50 + 20,
+                                 QPen(Qt.green))
+                    if lastY is not None and lastY is not 20:
+                        self.addLine(currTime,
+                                     index * 50 + 20,
+                                     currTime,
+                                     index * 50 + lastY,
+                                     QPen(Qt.green))
+                    lastY = 20
+                elif currValue == '1':
+                    self.addLine(currTime,
+                                 index * 50 - 20,
+                                 change.time,
+                                 index * 50 - 20,
+                                 QPen(Qt.green))
+                    if lastY is not None and lastY is not -20:
+                        self.addLine(currTime,
+                                     index * 50 - 20,
+                                     currTime,
+                                     index * 50 + lastY,
+                                     QPen(Qt.green))
+                    lastY = -20
+            currTime = change.time
+            currValue = change.val
+        self.activeSignals.append(signal)
 
     def dragMoveEvent(self, e):
         e.acceptProposedAction()
@@ -254,7 +325,8 @@ class SigListModel(QStandardItemModel):
 
     def mimeData(self, indices):
         data = QMimeData()
-        data.setText(self.item(0).data().signame)
+        siginfo = self.item(0).data()
+        data.setText(siginfo.sid)
         return data
 
 
@@ -301,6 +373,7 @@ class MainApp():
                                                "",
                                                "Waveform Files (*.vcd)")
         if fname:
+            self.scene.fname = fname
             head = get_header(fname)
             self.window.treeWidget.clear()
             root = self.loadScopes(head.rootscope, self.window.treeWidget)
