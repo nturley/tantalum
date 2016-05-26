@@ -310,6 +310,11 @@ class MyScene(QGraphicsScene):
                 currtime = change.time
                 currval = change.val
 
+    def wheelEvent(self, e):
+        print 'wheel'
+        print e.delta()
+        e.accept()
+
     def dragEnterEvent(self, e):
         e.acceptProposedAction()
 
