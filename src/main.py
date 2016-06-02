@@ -36,6 +36,7 @@ class Signal:
         self.signame = words[3]
         self.scope = scope
         scope.addsig(self)
+        self.changes = None
 
     def __str__(self):
         return self.signame
@@ -58,6 +59,15 @@ class Scope:
 
     def addsig(self, child):
         self.childsigs.append(child)
+
+    def getsigdict(self, parentdict=None):
+        if parentdict is None:
+            parentdict = {}
+        for sig in self.childsigs:
+            parentdict[sig.sid] = sig
+        for scope in self.childscopes:
+            scope.getsigdict(parentdict)
+        return parentdict
 
     indent_level = 0
 
@@ -245,6 +255,7 @@ def get_header(file_name):
 
 
 def get_signal_changes(file_name, signal_id):
+    """ yields all value changes for a signal """
     with open(file_name) as f:
         for com in generate_commands(f):
             if com.comtype == 'vc':
@@ -252,68 +263,65 @@ def get_signal_changes(file_name, signal_id):
                     continue
                 yield com
 
+class ViewPortModel():
+    def __init__(self, fname, sigdict):
+        self.fname = fname
+        self.sigdict = sigdict
 
 class MyScene(QGraphicsScene):
-    def __init__(self):
+    def __init__(self, window):
         super(MyScene, self).__init__()
-        self.activeSignals = []
+        self.active_signals = []
+        self.pixelspertick = 1
+        self.activeItems = []
+        self.model = None
+        self.window = window
+
+    def update_range(self, e):
+        print '?'
+        scene_rect = self.window.graphicsView.mapToScene(self.window.graphicsView.viewport().geometry()).boundingRect()
+        self.window.fromEdit.setText(str(scene_rect.left()))
+        self.window.toEdit.setText(str(scene_rect.right()))
+
+    def refresh_items(self):
+        for item in self.activeItems:
+            self.removeItem(item)
+        self.activeItems = []
+        for sigindex, signal in enumerate(self.active_signals):
+            currtime = None
+            currval = None
+            for change in signal.changes:
+                if currtime is not None:
+                    if currval == 'x':
+                        pen = QPen(Qt.red)
+                        y = sigindex * 50
+                    if currval == '0':
+                        pen = QPen(Qt.green)
+                        y = sigindex * 50 + 20
+                    if currval == '1':
+                        pen = QPen(Qt.green)
+                        y = sigindex * 50 - 20
+                    line = self.addLine(currtime * self.pixelspertick,
+                                        y,
+                                        change.time * self.pixelspertick,
+                                        y,
+                                        pen)
+                    self.activeItems.append(line)
+                currtime = change.time
+                currval = change.val
 
     def dragEnterEvent(self, e):
         e.acceptProposedAction()
 
     def dropEvent(self, e):
         sid = e.mimeData().text()
-        print 'received sid: ' + sid
-        signal = [s for s in get_signal_changes(self.fname, sid)]
-        index = len(self.activeSignals)
-        currTime = None
-        currValue = None
-        lastY = None
-        for change in signal:
-            print change
-            if currTime is not None:
-                if currValue == 'x':
-                    self.addLine(currTime,
-                                 index * 50,
-                                 change.time,
-                                 index * 50,
-                                 QPen(Qt.red))
-                    if lastY is not None and lastY is not 0:
-                        self.addLine(currTime,
-                                     index * 50,
-                                     currTime,
-                                     index * 50 + lastY,
-                                     QPen(Qt.red))
-                    lastY = 0
-                elif currValue == '0':
-                    self.addLine(currTime,
-                                 index * 50 + 20,
-                                 change.time,
-                                 index * 50 + 20,
-                                 QPen(Qt.green))
-                    if lastY is not None and lastY is not 20:
-                        self.addLine(currTime,
-                                     index * 50 + 20,
-                                     currTime,
-                                     index * 50 + lastY,
-                                     QPen(Qt.green))
-                    lastY = 20
-                elif currValue == '1':
-                    self.addLine(currTime,
-                                 index * 50 - 20,
-                                 change.time,
-                                 index * 50 - 20,
-                                 QPen(Qt.green))
-                    if lastY is not None and lastY is not -20:
-                        self.addLine(currTime,
-                                     index * 50 - 20,
-                                     currTime,
-                                     index * 50 + lastY,
-                                     QPen(Qt.green))
-                    lastY = -20
-            currTime = change.time
-            currValue = change.val
-        self.activeSignals.append(signal)
+        sig = self.model.sigdict[sid]
+        if sig in self.active_signals:
+            return
+        self.active_signals.append(sig)
+        sigchanges = [s for s in get_signal_changes(self.model.fname, sid)]
+        self.model.sigdict[sid].changes = sigchanges
+        self.refresh_items()
 
     def dragMoveEvent(self, e):
         e.acceptProposedAction()
@@ -349,13 +357,15 @@ class MainApp():
         self.siglistmodel = SigListModel()
         self.window.listView.setModel(self.siglistmodel)
         self.window.listView.setDragEnabled(True)
-        self.scene = MyScene()
+        self.scene = MyScene(self.window)
         self.window.graphicsView.setScene(self.scene)
         self.window.graphicsView.setAcceptDrops(True)
 
         # connect signals
         self.window.actionOpen.triggered.connect(self.openfile)
         self.window.treeWidget.itemSelectionChanged.connect(self.treeselectchanged)
+        self.window.graphicsView.horizontalScrollBar().rangeChanged.connect(self.scene.update_range)
+        self.window.graphicsView.horizontalScrollBar().valueChanged.connect(self.scene.update_range)
 
         # setup look and feel
         self.res = AppResources()
@@ -373,8 +383,11 @@ class MainApp():
                                                "",
                                                "Waveform Files (*.vcd)")
         if fname:
-            self.scene.fname = fname
             head = get_header(fname)
+            
+            model = ViewPortModel(fname, head.rootscope.getsigdict())
+            self.scene.model = model
+            
             self.window.treeWidget.clear()
             root = self.loadScopes(head.rootscope, self.window.treeWidget)
             self.window.treeWidget.expandAll()
