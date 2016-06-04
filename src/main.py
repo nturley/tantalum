@@ -263,10 +263,12 @@ def get_signal_changes(file_name, signal_id):
                     continue
                 yield com
 
+
 class ViewPortModel():
     def __init__(self, fname, sigdict):
         self.fname = fname
         self.sigdict = sigdict
+
 
 class MyScene(QGraphicsScene):
     def __init__(self, window):
@@ -276,12 +278,38 @@ class MyScene(QGraphicsScene):
         self.activeItems = []
         self.model = None
         self.window = window
+        self.leftAxis = self.addRect(QRectF(0, 0, 50, 200), QPen(Qt.blue))
+        self.topAxis = self.addRect(QRectF(0, 0, 200, 50), QPen(Qt.blue))
+        self.starttime = None
 
-    def update_range(self, e):
-        print '?'
-        scene_rect = self.window.graphicsView.mapToScene(self.window.graphicsView.viewport().geometry()).boundingRect()
-        self.window.fromEdit.setText(str(scene_rect.left()))
-        self.window.toEdit.setText(str(scene_rect.right()))
+    def update_viewport(self, e):
+        # adjust the scene rect
+        gv = self.window.graphicsView
+        hbar = self.window.graphicsView.horizontalScrollBar()
+        vbar = self.window.graphicsView.verticalScrollBar()
+
+        scene_rect = gv.mapToScene(gv.viewport().rect()).boundingRect()
+        self.leftAxis.setX(scene_rect.left())
+        self.topAxis.setY(scene_rect.top())
+        # weird bug workaround
+        if hbar.value() == 0:
+            self.leftAxis.setX(-50)
+        if vbar.value() == 0:
+            self.topAxis.setY(-50)
+
+        self.update_timerange(scene_rect.left() + 50, scene_rect.top())
+
+    def update_timerange(self, fromtime, totime):
+        self.window.fromEdit.setText(str(fromtime))
+        self.window.toEdit.setText(str(totime))
+
+    def update_rect(self):
+        # keep the scene rect as small as possible
+        boundbox = self.itemsBoundingRect()
+        # manually set these (it gets confused by the axes)
+        boundbox.setLeft(-50)
+        boundbox.setTop(-50)
+        self.setSceneRect(boundbox)
 
     def refresh_items(self):
         for item in self.activeItems:
@@ -294,21 +322,25 @@ class MyScene(QGraphicsScene):
                 if currtime is not None:
                     if currval == 'x':
                         pen = QPen(Qt.red)
-                        y = sigindex * 50
+                        y = sigindex * 50 + 10
                     if currval == '0':
                         pen = QPen(Qt.green)
-                        y = sigindex * 50 + 20
+                        y = sigindex * 50 + 20 + 10
                     if currval == '1':
                         pen = QPen(Qt.green)
-                        y = sigindex * 50 - 20
-                    line = self.addLine(currtime * self.pixelspertick,
+                        y = sigindex * 50 - 20 + 10
+                    fromx = (currtime - self.starttime) * self.pixelspertick
+                    tox = (change.time - self.starttime) * self.pixelspertick
+                    line = self.addLine(fromx,
                                         y,
-                                        change.time * self.pixelspertick,
+                                        tox,
                                         y,
                                         pen)
                     self.activeItems.append(line)
                 currtime = change.time
                 currval = change.val
+        self.update_viewport(None)
+        self.update_rect()
 
     def wheelEvent(self, e):
         print 'wheel'
@@ -325,6 +357,9 @@ class MyScene(QGraphicsScene):
             return
         self.active_signals.append(sig)
         sigchanges = [s for s in get_signal_changes(self.model.fname, sid)]
+        # hypothetically, signals may start at different times
+        if self.starttime is None or sigchanges[0].time < self.starttime:
+            self.starttime = sigchanges[0].time
         self.model.sigdict[sid].changes = sigchanges
         self.refresh_items()
 
@@ -338,7 +373,7 @@ class SigListModel(QStandardItemModel):
 
     def mimeData(self, indices):
         data = QMimeData()
-        siginfo = self.item(0).data()
+        siginfo = self.itemFromIndex(indices[0]).data()
         data.setText(siginfo.sid)
         return data
 
@@ -369,8 +404,14 @@ class MainApp():
         # connect signals
         self.window.actionOpen.triggered.connect(self.openfile)
         self.window.treeWidget.itemSelectionChanged.connect(self.treeselectchanged)
-        self.window.graphicsView.horizontalScrollBar().rangeChanged.connect(self.scene.update_range)
-        self.window.graphicsView.horizontalScrollBar().valueChanged.connect(self.scene.update_range)
+
+        hbar = self.window.graphicsView.horizontalScrollBar()
+        hbar.rangeChanged.connect(self.scene.update_viewport)
+        hbar.valueChanged.connect(self.scene.update_viewport)
+
+        vbar = self.window.graphicsView.verticalScrollBar()
+        vbar.rangeChanged.connect(self.scene.update_viewport)
+        vbar.valueChanged.connect(self.scene.update_viewport)
 
         # setup look and feel
         self.res = AppResources()
@@ -389,10 +430,10 @@ class MainApp():
                                                "Waveform Files (*.vcd)")
         if fname:
             head = get_header(fname)
-            
+
             model = ViewPortModel(fname, head.rootscope.getsigdict())
             self.scene.model = model
-            
+
             self.window.treeWidget.clear()
             root = self.loadScopes(head.rootscope, self.window.treeWidget)
             self.window.treeWidget.expandAll()

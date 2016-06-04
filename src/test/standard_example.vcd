@@ -6,6 +6,15 @@ $timescale 1 ns
 $end
 $scope module top $end
 $var trireg 1 *@ net1 $end
+$var reg 1 a boring1  $end
+$var reg 1 b boring2  $end
+$var reg 1 c boring3  $end
+$var reg 1 d boring4  $end
+$var reg 1 e boring5  $end
+$var reg 1 f boring6  $end
+$var reg 1 g boring7  $end
+$var reg 1 h boring8  $end
+$var reg 1 i boring9  $end
 $scope module m1 $end
 $var trireg 1 *# net2 $end
 $var trireg 1 *$ net3 $end
@@ -20,8 +29,16 @@ $comment
 $dumpvars was executed at time '#500'.
 All initial values are dumped at this time.
 $end
-#500
+#50
 $dumpvars
+0a
+0c
+0d
+0e
+0f
+0g
+0h
+0i
 x*@
 x*#
 x*$
@@ -45,6 +62,15 @@ bz (k
 $dumpall 0*@ 1*# 0*$
 bz (k
 b1111000101z01x {2
+0a
+0b
+0c
+0d
+0e
+0f
+0g
+0h
+0i
 $end
 #540
 1*$
@@ -63,6 +89,15 @@ z*@
 0*$
 b0 (k
 bx {2
+0a
+0b
+0c
+0d
+0e
+0f
+0g
+0h
+0i
 $end
 #2010
 1*$
