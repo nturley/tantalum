@@ -12,8 +12,10 @@ class MyScene(QGraphicsScene):
         self.activeItems = []
         self.model = None
         self.window = window
-        self.leftAxis = self.addRect(QRectF(0, 0, 50, 200), QPen(Qt.blue))
-        self.topAxis = self.addRect(QRectF(0, 0, 200, 50), QPen(Qt.blue))
+        self.leftAxis = self.addRect(QRectF(0, 0, 50, 200), Qt.NoPen, QBrush(QColor(47, 47, 46)))
+        self.leftAxis.setZValue(1)
+        self.topAxis = self.addRect(QRectF(0, 0, 200, 50), Qt.NoPen, QBrush(QColor(47, 47, 46)))
+        self.topAxis.setZValue(1)
         self.starttime = None
 
     def update_viewport(self, e):
@@ -75,6 +77,8 @@ class MyScene(QGraphicsScene):
                 currval = change.val
         self.update_viewport(None)
         self.update_rect()
+        rect = self.leftAxis.rect()
+        self.leftAxis.setRect(rect.x(), rect.y(), 50, 50 * len(self.active_signals) + 30)
 
     def wheelEvent(self, e):
         print 'wheel'
