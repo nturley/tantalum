@@ -6,7 +6,7 @@ $timescale 1 ns
 $end
 $scope module top $end
 $var trireg 1 *@ net1 $end
-$var reg 1 a boring1  $end
+$var reg 1 a clk $end
 $var reg 1 b boring2  $end
 $var reg 1 c boring3  $end
 $var reg 1 d boring4  $end
@@ -45,6 +45,16 @@ x*$
 bx (k
 bx {2
 $end
+#100
+1a
+#150
+0a
+#200
+1a
+#250
+0a
+#300
+1a
 #505
 0*@
 1*#

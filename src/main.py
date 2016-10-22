@@ -20,9 +20,15 @@ class MainApp():
         self.siglistmodel = SigListModel()
         self.window.listView.setModel(self.siglistmodel)
         self.window.listView.setDragEnabled(True)
+
+        activesiglistmodel = SigListModel()
+        self.window.active_signal_list.setModel(activesiglistmodel)
+        self.window.active_signal_list.setAcceptDrops(True)
+
         self.scene = scene.MyScene(self.window)
         self.window.graphicsView.setScene(self.scene)
         self.window.graphicsView.setAcceptDrops(True)
+        self.scene.activesiglistmodel = activesiglistmodel
 
         # connect signals
         self.window.actionOpen.triggered.connect(self.openfile)
@@ -37,9 +43,9 @@ class MainApp():
         vbar.valueChanged.connect(self.scene.update_viewport)
 
         # setup look and feel
-        self.res = AppResources()
+        res = AppResources()
         self.app.setStyleSheet(qdarkstyle.load_stylesheet())
-        self.scene.setBackgroundBrush(QBrush(self.res.bgcolor))
+        self.scene.setBackgroundBrush(QBrush(res.bgcolor))
 
         self.window.show()
 
@@ -66,7 +72,7 @@ class MainApp():
     def loadsigs(self, scope):
         self.siglistmodel.clear()
         for sig in scope.childsigs:
-            newitem = QStandardItem(self.res.icon, sig.signame)
+            newitem = QStandardItem(AppResources().icon, sig.signame)
             newitem.setDragEnabled(True)
             newitem.setData(sig)
             self.siglistmodel.appendRow(newitem)
@@ -74,7 +80,7 @@ class MainApp():
     def loadScopes(self, scope, currparent):
         newItem = QTreeWidgetItem(currparent)
         newItem.setText(0, scope.name)
-        newItem.setIcon(0, self.res.blockIcon)
+        newItem.setIcon(0, AppResources().blockIcon)
         newItem.scope = scope
         for childscope in scope.childscopes:
             self.loadScopes(childscope, newItem)
