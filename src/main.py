@@ -29,18 +29,19 @@ class MainApp():
         self.window.graphicsView.setScene(self.scene)
         self.window.graphicsView.setAcceptDrops(True)
         self.scene.activesiglistmodel = activesiglistmodel
+        self.scene.active_signal_list = self.window.active_signal_list
 
         # connect signals
         self.window.actionOpen.triggered.connect(self.openfile)
         self.window.treeWidget.itemSelectionChanged.connect(self.treeselectchanged)
 
         hbar = self.window.graphicsView.horizontalScrollBar()
-        hbar.rangeChanged.connect(self.scene.update_viewport)
-        hbar.valueChanged.connect(self.scene.update_viewport)
+        hbar.rangeChanged.connect(self.scene.view_changed)
+        hbar.valueChanged.connect(self.scene.view_changed)
 
         vbar = self.window.graphicsView.verticalScrollBar()
-        vbar.rangeChanged.connect(self.scene.update_viewport)
-        vbar.valueChanged.connect(self.scene.update_viewport)
+        vbar.rangeChanged.connect(self.scene.view_changed)
+        vbar.valueChanged.connect(self.scene.view_changed)
 
         # setup look and feel
         res = AppResources()
